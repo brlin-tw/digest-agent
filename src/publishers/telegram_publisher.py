@@ -9,7 +9,7 @@ from typing import Dict
 
 import aiohttp
 
-from .base_publisher import BasePublisher, PublishResult
+from .base_publisher import BasePublisher, PublishResult, STAR_FOOTER_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,10 @@ class TelegramPublisher(BasePublisher):
             api_url = f"{self.TELEGRAM_API_BASE.format(token=bot_token)}/sendMessage"
 
             async with aiohttp.ClientSession() as session:
-                for article in articles:
+                for i, article in enumerate(articles):
                     text = self._format_single_article(article)
+                    if i == len(articles) - 1:
+                        text += f"\n\n<i>{STAR_FOOTER_TEXT}</i>"
                     payload = {
                         "chat_id": chat_id,
                         "text": text,

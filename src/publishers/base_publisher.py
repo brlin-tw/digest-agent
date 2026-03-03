@@ -38,6 +38,10 @@ class MultiPublishResult:
             self.total_failed += 1
 
 
+REPO_URL = "https://github.com/jimmyliao/digest-agent"
+STAR_FOOTER_TEXT = f"⭐ 覺得好用？請幫忙點個 Star → {REPO_URL}"
+
+
 class BasePublisher(ABC):
     """發佈渠道抽象基底類別"""
 

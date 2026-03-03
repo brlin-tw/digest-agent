@@ -9,7 +9,7 @@ from typing import Dict
 
 import aiohttp
 
-from .base_publisher import BasePublisher, PublishResult
+from .base_publisher import BasePublisher, PublishResult, REPO_URL, STAR_FOOTER_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +157,25 @@ class LinePublisher(BasePublisher):
         if body_contents and body_contents[-1].get("type") == "separator":
             body_contents.pop()
 
+        footer_contents = {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "12px",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "uri",
+                        "label": "⭐ 覺得好用？點個 Star",
+                        "uri": REPO_URL,
+                    },
+                    "style": "secondary",
+                    "height": "sm",
+                    "color": "#f5f5f5",
+                }
+            ],
+        }
+
         flex_message = {
             "type": "flex",
             "altText": f"📰 Daily Digest ({len(articles)} articles)",
@@ -188,6 +207,7 @@ class LinePublisher(BasePublisher):
                     "layout": "vertical",
                     "contents": body_contents,
                 },
+                "footer": footer_contents,
             },
         }
 

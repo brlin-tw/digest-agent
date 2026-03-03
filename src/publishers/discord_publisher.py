@@ -10,7 +10,7 @@ from datetime import datetime
 
 import aiohttp
 
-from .base_publisher import BasePublisher, PublishResult
+from .base_publisher import BasePublisher, PublishResult, STAR_FOOTER_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class DiscordPublisher(BasePublisher):
             embeds = self._format_embeds(articles)
             payload = {
                 "username": username,
-                "content": f"**📰 Daily Digest** - {len(articles)} articles",
+                "content": f"**📰 Daily Digest** - {len(articles)} articles\n-# {STAR_FOOTER_TEXT}",
                 "embeds": embeds[:10],
             }
             if avatar_url:

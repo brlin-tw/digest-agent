@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from typing import Dict
 
-from .base_publisher import BasePublisher, PublishResult
+from .base_publisher import BasePublisher, PublishResult, REPO_URL, STAR_FOOTER_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,8 @@ class EmailPublisher(BasePublisher):
     </div>
     {articles_html}
     <div style="text-align:center;padding:16px;color:#999;font-size:12px;border-top:1px solid #eee;">
-        Powered by Digest Agent
+        ⭐ 覺得好用？<a href="{REPO_URL}" style="color:#1a73e8;">請幫忙點個 Star</a>
+        &nbsp;·&nbsp; Powered by <a href="{REPO_URL}" style="color:#1a73e8;">digest-agent</a>
     </div>
 </body>
 </html>"""
