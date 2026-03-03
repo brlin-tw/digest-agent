@@ -19,6 +19,7 @@ from src.models.database import (  # noqa: E402
     TaskRecordDB,
 )
 from src.orchestrator import DigestOrchestrator  # noqa: E402
+from src.scheduler import is_running, sync_scheduler_state  # noqa: E402
 
 
 # ── DB helpers ──────────────────────────────────────────────
@@ -525,8 +526,10 @@ with tab3:
 # ── Tab 4: Schedule Config ────────────────────────────────────
 with tab4:
     st.subheader("⏰ 排程設定")
-    st.caption("設定自動排程後，需搭配 Cloud Run Scheduler 或本地 APScheduler 才能自動觸發。"
-               "下方「立即執行」按鈕可手動執行完整 Pipeline。")
+    if is_running():
+        st.success("🟢 背景排程器執行中（每分鐘 check 一次）", icon=None)
+    else:
+        st.info("⚪ 背景排程器未啟動 — 啟用任一排程後自動啟動")
 
     SCHEDULE_DEFS = [
         ("fetch_summarize", "📥 Fetch + Summarize", False),
@@ -611,6 +614,7 @@ with tab4:
                         tz_name=new_tz,
                         channels=new_channels if show_channels else [],
                     )
+                    sync_scheduler_state()  # 有啟用才 start，全停用才 stop
                     st.success("✅ 排程設定已儲存")
                     st.rerun()
 

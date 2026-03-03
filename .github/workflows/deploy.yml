@@ -1,8 +1,11 @@
 name: Deploy to Cloud Run
 
+# TODO: 設定好 GCP secrets 後再啟用自動部署
+# on:
+#   push:
+#     branches: [main]
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # 只允許手動觸發
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

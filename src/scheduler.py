@@ -1,7 +1,10 @@
 """背景排程器 - 讀取 ScheduleConfigDB 自動執行 Pipeline.
 
-使用 APScheduler BackgroundScheduler，搭配 Streamlit @st.cache_resource
-確保整個 app 生命週期只啟動一次。
+設計原則：
+  - 只有 DB 中有任何 enabled=True 的排程時才啟動 APScheduler
+  - 全部停用時自動 shutdown（不佔背景 thread）
+  - module-level singleton：Python 同一 process import 只執行一次，
+    不需要 @st.cache_resource，頁面切換不會重複建立
 
 排程判斷邏輯（每分鐘 check 一次）：
   - interval 模式：now - last_run >= interval_hours
@@ -17,13 +20,70 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
+# ── module-level singleton ──────────────────────────────────
+_scheduler: BackgroundScheduler | None = None
+
+
+def is_running() -> bool:
+    return _scheduler is not None and _scheduler.running
+
+
+def start_scheduler() -> BackgroundScheduler:
+    """啟動背景排程器（若已在執行則直接回傳）。"""
+    global _scheduler
+    if _scheduler is not None and _scheduler.running:
+        return _scheduler
+    _scheduler = BackgroundScheduler(timezone="UTC")
+    _scheduler.add_job(
+        _run_pipeline_job,
+        trigger="interval",
+        minutes=1,
+        id="pipeline_check",
+        replace_existing=True,
+        max_instances=1,
+    )
+    _scheduler.start()
+    logger.info("[Scheduler] Background scheduler started (check every 1 min)")
+    return _scheduler
+
+
+def stop_scheduler():
+    """停止背景排程器並釋放 thread。"""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("[Scheduler] Stopped")
+    _scheduler = None
+
+
+def sync_scheduler_state():
+    """讀取 DB，有任何 enabled=True 就 start，全部 False 就 stop。
+    在 app.py 啟動時 以及 每次儲存排程設定後 呼叫。
+    """
+    from src.models.database import ScheduleConfigDB, SessionLocal
+
+    db = SessionLocal()
+    try:
+        any_enabled = (
+            db.query(ScheduleConfigDB)
+            .filter(ScheduleConfigDB.enabled.is_(True))
+            .count() > 0
+        )
+    finally:
+        db.close()
+
+    if any_enabled and not is_running():
+        start_scheduler()
+    elif not any_enabled and is_running():
+        stop_scheduler()
+
+
+# ── helpers ─────────────────────────────────────────────────
 
 def _should_run(enabled: bool, mode: str, interval_hours: int,
                 time_of_day: str, tz_name: str, last_run: datetime | None) -> bool:
-    """判斷是否應該執行。"""
     if not enabled:
         return False
-
     try:
         from zoneinfo import ZoneInfo
         tz = ZoneInfo(tz_name or "Asia/Taipei")
@@ -35,22 +95,22 @@ def _should_run(enabled: bool, mode: str, interval_hours: int,
     if mode == "interval":
         if last_run is None:
             return True
-        last = last_run.astimezone(tz)
-        return (now - last) >= timedelta(hours=interval_hours)
+        return (now - last_run.astimezone(tz)) >= timedelta(hours=interval_hours)
 
-    # cron mode: run once per day at time_of_day
+    # cron: once per day at time_of_day
     try:
         h, m = map(int, (time_of_day or "08:00").split(":"))
     except ValueError:
         h, m = 8, 0
     target = now.replace(hour=h, minute=m, second=0, microsecond=0)
     if now < target:
-        return False  # 還沒到今天的執行時間
+        return False
     if last_run is None:
         return True
-    last = last_run.astimezone(tz)
-    return last.date() < now.date()  # 今天還沒跑過
+    return last_run.astimezone(tz).date() < now.date()
 
+
+# ── main job ────────────────────────────────────────────────
 
 def _run_pipeline_job():
     """APScheduler job：每分鐘被呼叫，依 DB config 決定是否執行 pipeline。"""
@@ -96,7 +156,6 @@ def _run_pipeline_job():
             result = asyncio.run(orch.run_fetch_pipeline(sources=sources))
             logger.info("[Scheduler] Fetch done: %d articles", result.articles_fetched)
 
-            # Summarize pending articles
             summarizer = GeminiSummarizer()
             db = SessionLocal()
             count = 0
@@ -122,7 +181,6 @@ def _run_pipeline_job():
                 db.close()
             logger.info("[Scheduler] Summarize done: %d articles", count)
 
-            # Update last_run
             db = SessionLocal()
             try:
                 sc = db.query(ScheduleConfigDB).filter(
@@ -188,22 +246,3 @@ def _run_pipeline_job():
 
         except Exception:
             logger.exception("[Scheduler] Publish failed")
-
-
-def start_scheduler() -> BackgroundScheduler:
-    """啟動背景排程器（每分鐘 check 一次 DB config）。
-
-    設計為 Streamlit @st.cache_resource 呼叫，整個 app 只啟動一次。
-    """
-    scheduler = BackgroundScheduler(timezone="UTC")
-    scheduler.add_job(
-        _run_pipeline_job,
-        trigger="interval",
-        minutes=1,
-        id="pipeline_check",
-        replace_existing=True,
-        max_instances=1,  # 避免上一次還沒跑完就重疊啟動
-    )
-    scheduler.start()
-    logger.info("[Scheduler] Background scheduler started (check every 1 min)")
-    return scheduler
