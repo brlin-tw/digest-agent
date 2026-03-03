@@ -13,6 +13,7 @@ st.set_page_config(page_title="發佈控制 - Digest Agent", page_icon="🚀", l
 from src.models.database import (  # noqa: E402
     ArticleDB,
     ChannelConfigDB,
+    ScheduleConfigDB,
     SessionLocal,
     SourceDB,
     TaskRecordDB,
@@ -164,6 +165,39 @@ def get_channel_config(channel_id: str) -> tuple[dict, dict]:
     return effective, source_map
 
 
+def load_schedule_config(cfg_id: str) -> ScheduleConfigDB | None:
+    db = SessionLocal()
+    try:
+        return db.query(ScheduleConfigDB).filter(ScheduleConfigDB.id == cfg_id).first()
+    finally:
+        db.close()
+
+
+def save_schedule_config(cfg_id: str, enabled: bool, mode: str, interval_hours: int,
+                          time_of_day: str, tz_name: str, channels: list):
+    db = SessionLocal()
+    try:
+        row = db.query(ScheduleConfigDB).filter(ScheduleConfigDB.id == cfg_id).first()
+        if row:
+            row.enabled = enabled
+            row.mode = mode
+            row.interval_hours = interval_hours
+            row.time_of_day = time_of_day
+            row.timezone = tz_name
+            row.channels = json.dumps(channels)
+            row.updated_at = datetime.now(timezone.utc)
+        else:
+            row = ScheduleConfigDB(
+                id=cfg_id, enabled=enabled, mode=mode,
+                interval_hours=interval_hours, time_of_day=time_of_day,
+                timezone=tz_name, channels=json.dumps(channels),
+            )
+            db.add(row)
+        db.commit()
+    finally:
+        db.close()
+
+
 def save_channel_config(channel_id: str, config: dict):
     db = SessionLocal()
     try:
@@ -192,7 +226,7 @@ def save_channel_config(channel_id: str, config: dict):
 
 st.title("🚀 發佈控制")
 
-tab1, tab2, tab3 = st.tabs(["🔄 Pipeline 操作", "📡 RSS Sources", "⚙️ 渠道設定"])
+tab1, tab2, tab3, tab4 = st.tabs(["🔄 Pipeline 操作", "📡 RSS Sources", "⚙️ 渠道設定", "⏰ 排程設定"])
 
 # ── Tab 1: Pipeline ──────────────────────────────────────────
 with tab1:
@@ -486,3 +520,225 @@ with tab3:
                             db.close()
                         st.info("DB 設定已清除，改用 .env")
                         st.rerun()
+
+
+# ── Tab 4: Schedule Config ────────────────────────────────────
+with tab4:
+    st.subheader("⏰ 排程設定")
+    st.caption("設定自動排程後，需搭配 Cloud Run Scheduler 或本地 APScheduler 才能自動觸發。"
+               "下方「立即執行」按鈕可手動執行完整 Pipeline。")
+
+    SCHEDULE_DEFS = [
+        ("fetch_summarize", "📥 Fetch + Summarize", False),
+        ("publish",         "📤 Publish",           True),   # True = show channels selector
+    ]
+
+    for cfg_id, cfg_label, show_channels in SCHEDULE_DEFS:
+        cfg = load_schedule_config(cfg_id)
+        if cfg is None:
+            st.warning(f"找不到 `{cfg_id}` 設定，請重新初始化 DB（make shell）")
+            continue
+
+        cur_channels = json.loads(cfg.channels or '["telegram"]')
+
+        with st.expander(f"{cfg_label}", expanded=True):
+            with st.form(f"sched_form_{cfg_id}"):
+                c_enable, c_mode = st.columns([1, 2])
+                with c_enable:
+                    new_enabled = st.toggle("啟用排程", value=cfg.enabled, key=f"sched_en_{cfg_id}")
+                with c_mode:
+                    mode_opts = ["interval", "cron"]
+                    mode_idx = mode_opts.index(cfg.mode) if cfg.mode in mode_opts else 0
+                    new_mode = st.radio(
+                        "排程模式",
+                        mode_opts,
+                        index=mode_idx,
+                        format_func=lambda x: "每隔 N 小時" if x == "interval" else "每天固定時間",
+                        horizontal=True,
+                        key=f"sched_mode_{cfg_id}",
+                    )
+
+                c_hours, c_time, c_tz = st.columns(3)
+                with c_hours:
+                    new_interval = st.number_input(
+                        "間隔（小時）",
+                        min_value=1, max_value=168,
+                        value=cfg.interval_hours,
+                        disabled=(new_mode != "interval"),
+                        key=f"sched_hours_{cfg_id}",
+                    )
+                with c_time:
+                    new_time = st.text_input(
+                        "固定時間（HH:MM）",
+                        value=cfg.time_of_day or "08:00",
+                        disabled=(new_mode != "cron"),
+                        key=f"sched_time_{cfg_id}",
+                        placeholder="08:00",
+                    )
+                with c_tz:
+                    new_tz = st.text_input(
+                        "時區",
+                        value=cfg.timezone or "Asia/Taipei",
+                        key=f"sched_tz_{cfg_id}",
+                    )
+
+                if show_channels:
+                    new_channels = st.multiselect(
+                        "發佈渠道",
+                        ["telegram", "email", "line", "discord"],
+                        default=cur_channels,
+                        key=f"sched_ch_{cfg_id}",
+                    )
+                else:
+                    new_channels = []
+
+                # Display last_run / next_run
+                info_col1, info_col2 = st.columns(2)
+                with info_col1:
+                    last_str = cfg.last_run.strftime("%Y-%m-%d %H:%M") if cfg.last_run else "—"
+                    st.caption(f"上次執行：{last_str}")
+                with info_col2:
+                    next_str = cfg.next_run.strftime("%Y-%m-%d %H:%M") if cfg.next_run else "—"
+                    st.caption(f"下次執行：{next_str}")
+
+                if st.form_submit_button("💾 儲存排程設定", use_container_width=True, type="primary"):
+                    save_schedule_config(
+                        cfg_id,
+                        enabled=new_enabled,
+                        mode=new_mode,
+                        interval_hours=int(new_interval),
+                        time_of_day=new_time,
+                        tz_name=new_tz,
+                        channels=new_channels if show_channels else [],
+                    )
+                    st.success("✅ 排程設定已儲存")
+                    st.rerun()
+
+    st.divider()
+    st.subheader("▶ 立即執行完整 Pipeline")
+    st.caption("手動觸發：依序執行 Fetch → Summarize → Publish（使用排程中設定的發佈渠道）")
+
+    publish_cfg = load_schedule_config("publish")
+    manual_channels = json.loads(publish_cfg.channels or '["telegram"]') if publish_cfg else ["telegram"]
+
+    override_channels = st.multiselect(
+        "本次發佈渠道（覆蓋排程設定）",
+        ["telegram", "email", "line", "discord"],
+        default=manual_channels,
+        key="manual_run_channels",
+    )
+
+    if st.button("🚀 立即執行 Fetch → Summarize → Publish", type="primary", use_container_width=True,
+                 disabled=not override_channels):
+        task_id = f"full-{uuid.uuid4().hex[:8]}"
+
+        # Step 1: Fetch
+        with st.status("執行中...", expanded=True) as status_box:
+            st.write("**Step 1/3** — Fetch 文章")
+            try:
+                sources_enabled = [
+                    {"id": s.id, "url": s.url, "name": s.name, "enabled": s.enabled}
+                    for s in list_sources() if s.enabled
+                ]
+                orch = DigestOrchestrator()
+                fetch_result = asyncio.run(orch.run_fetch_pipeline(sources=sources_enabled))
+                st.write(f"✅ Fetch 完成：新增 {fetch_result.articles_fetched} 篇")
+            except Exception as e:
+                st.error(f"❌ Fetch 失敗：{e}")
+                status_box.update(label="Pipeline 失敗", state="error")
+                st.stop()
+
+            # Step 2: Summarize
+            st.write("**Step 2/3** — Summarize 摘要")
+            try:
+                from src.llm.gemini_summarizer import GeminiSummarizer
+                summarizer = GeminiSummarizer()
+                db = SessionLocal()
+                summarized_count = 0
+                try:
+                    pending_rows = db.query(ArticleDB).filter(
+                        ArticleDB.publish_status == "pending"
+                    ).all()
+                    for article in pending_rows:
+                        result_sum = asyncio.run(summarizer.summarize({
+                            "title": article.title,
+                            "content": article.content or "",
+                        }))
+                        article.summary = json.dumps({
+                            "title_zh": result_sum.title_zh,
+                            "summary_zh": result_sum.summary_zh,
+                            "key_points": result_sum.key_points,
+                            "tags": result_sum.tags,
+                        })
+                        article.tags = json.dumps(result_sum.tags)
+                        article.publish_status = "summarized"
+                        article.summarized_at = datetime.now(timezone.utc)
+                        db.commit()
+                        summarized_count += 1
+                finally:
+                    db.close()
+                st.write(f"✅ Summarize 完成：處理 {summarized_count} 篇")
+            except Exception as e:
+                st.error(f"❌ Summarize 失敗：{e}")
+                status_box.update(label="Pipeline 失敗（Fetch 已完成）", state="error")
+                st.stop()
+
+            # Step 3: Publish
+            st.write(f"**Step 3/3** — Publish → {override_channels}")
+            try:
+                db = SessionLocal()
+                try:
+                    summarized_rows = db.query(ArticleDB).filter(
+                        ArticleDB.publish_status == "summarized"
+                    ).all()
+                    article_dicts = []
+                    for a in summarized_rows:
+                        try:
+                            sd = json.loads(a.summary or "{}")
+                        except Exception:
+                            sd = {}
+                        article_dicts.append({
+                            "id": a.id,
+                            "title": sd.get("title_zh") or a.title,
+                            "summary": sd.get("summary_zh", ""),
+                            "url": a.source_url or "",
+                            "source": a.source or "",
+                            "tags": json.loads(a.tags or "[]"),
+                        })
+                finally:
+                    db.close()
+
+                pub_result = asyncio.run(orch.run_publish_pipeline(
+                    articles=article_dicts, channels=override_channels,
+                ))
+
+                db = SessionLocal()
+                try:
+                    for ad in article_dicts:
+                        row = db.query(ArticleDB).filter(ArticleDB.id == ad["id"]).first()
+                        if row:
+                            row.publish_status = "published" if pub_result.success else "failed"
+                            row.published_at_channels = json.dumps({
+                                ch: datetime.now(timezone.utc).isoformat()
+                                for ch in override_channels
+                            })
+                    db.commit()
+
+                    # Update schedule last_run
+                    for cfg_id_upd in ("fetch_summarize", "publish"):
+                        sc = db.query(ScheduleConfigDB).filter(
+                            ScheduleConfigDB.id == cfg_id_upd
+                        ).first()
+                        if sc:
+                            sc.last_run = datetime.now(timezone.utc)
+                    db.commit()
+                finally:
+                    db.close()
+
+                st.write(f"✅ Publish 完成：{pub_result.published_count} 次成功")
+            except Exception as e:
+                st.error(f"❌ Publish 失敗：{e}")
+                status_box.update(label="Pipeline 失敗（Fetch+Summarize 已完成）", state="error")
+                st.stop()
+
+            status_box.update(label="✅ Full Pipeline 完成！", state="complete")
