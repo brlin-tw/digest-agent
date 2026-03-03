@@ -58,6 +58,25 @@ make install
 make dev     # loads ENV_FILE=~/workspace/.env by default
 ```
 
+**Alternative — use with AI Agent CLI:**
+
+This repo includes [`AGENTS.md`](./AGENTS.md) with full project context for AI coding assistants.
+Clone the repo and point your agent CLI directly at it:
+
+```bash
+# Claude Code
+claude                        # auto-loads CLAUDE.md (symlink → AGENTS.md)
+
+# Gemini CLI
+gemini -p "@AGENTS.md Explain the publish pipeline"
+
+# Any agent that reads AGENTS.md
+cat AGENTS.md                 # project context, architecture, dev guidelines
+```
+
+> `CLAUDE.md` and `GEMINI.md` are both symlinks to `AGENTS.md` —
+> each CLI picks up its own file automatically on startup.
+
 ---
 
 ## Architecture
@@ -190,6 +209,24 @@ uv run streamlit run src/app.py --server.port=8080
 make install
 make dev     # 預設讀取 ENV_FILE=~/workspace/.env
 ```
+
+**也可以搭配 AI Agent CLI 使用：**
+
+本 repo 內含 [`AGENTS.md`](./AGENTS.md)，提供完整專案架構與開發指南給 AI 工具讀取：
+
+```bash
+# Claude Code（自動載入 CLAUDE.md → 指向 AGENTS.md）
+claude
+
+# Gemini CLI
+gemini -p "@AGENTS.md 說明發佈 pipeline 的流程"
+
+# 直接查看專案說明
+cat AGENTS.md
+```
+
+> `CLAUDE.md` 和 `GEMINI.md` 都是 symlink 指向同一個 `AGENTS.md`，
+> 各 AI CLI 啟動時會自動載入對應的檔案。
 
 ---
 
