@@ -14,8 +14,18 @@ logging.basicConfig(
 )
 
 from src.models.database import init_db  # noqa: E402
+from src.scheduler import start_scheduler  # noqa: E402
 
 init_db()
+
+
+@st.cache_resource
+def _get_scheduler():
+    """整個 app 生命週期只啟動一次的背景排程器。"""
+    return start_scheduler()
+
+
+_get_scheduler()
 
 st.set_page_config(
     page_title="Digest Agent",
