@@ -27,3 +27,4 @@ htmlcov/
 
 # macOS
 .DS_Store
+firebase-debug.log
