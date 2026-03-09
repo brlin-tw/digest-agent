@@ -269,6 +269,7 @@ with tab1:
         st.subheader("2️⃣ Summarize 摘要")
         pending = list_pending_articles()
         st.caption(f"待摘要：{len(pending)} 篇")
+        max_summarize = st.slider("摘要數量上限", min_value=1, max_value=min(len(pending), 50) if len(pending) > 0 else 10, value=min(len(pending), 5) if len(pending) > 0 else 5)
 
         if st.button("▶ 開始 Summarize", use_container_width=True, type="primary", disabled=len(pending) == 0):
             task_id = f"summarize-{uuid.uuid4().hex[:8]}"
@@ -284,7 +285,7 @@ with tab1:
                 try:
                     articles_to_summarize = db.query(ArticleDB).filter(
                         ArticleDB.publish_status == "pending"
-                    ).all()
+                    ).limit(max_summarize).all()
 
                     total = len(articles_to_summarize)
                     for i, article in enumerate(articles_to_summarize):

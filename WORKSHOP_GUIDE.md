@@ -210,3 +210,16 @@
 
 6. **測試發佈**：
    回到 **[Pipeline 操作]**，選取已摘要的文章點擊 **[Publish]**。 ✅
+
+---
+
+## 🛠️ 常見問題與排除 (Troubleshooting)
+
+*   **1. 程式報錯 `429 RESOURCE_EXHAUSTED`**：
+    *   **原因**：免費版 Gemini API 每分鐘限制約 15 次請求。一次摘要太多文章（如 50 篇以上）會導致超限。
+    *   **解法**：在 **[2_publish]** 頁面，使用「摘要數量上限」拉桿，建議一次設定 5-10 篇即可。
+*   **2. Agent 找不到資料表 (Hallucinate SQLite Table)**：
+    *   **原因**：Agent 可能沒讀到 `AGENTS.md` 或是工作目錄縮在子目錄。
+    *   **解法**：請確保在 `digest-agent` 根目錄啟動 Agent。如果它還是亂寫 SQL，可以提醒它：「請參考 AGENTS.md 中的資料庫架構，使用 ArticleDB 資料表」。
+*   **3. Telegram `chat not found`**：
+    *   **解法**：請檢查是否已經對 Bot 按下 **[Start]**。機器人無法主動發訊給沒互動過的用戶。
