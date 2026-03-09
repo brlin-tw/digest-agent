@@ -8,9 +8,15 @@
 
 ---
 
-> [!TIP]
-> **給學員的快速起手式**：
-> 如果你已經安裝好 Antigravity，可以直接跳到 [情境 2：用 Antigravity IDE (自動化設定)](#情境-2用-antigravity-ide-自動化設定) 複製 Prompt，讓 AI 幫你做完環境設定！
+> [!IMPORTANT]
+> **🚀 快速開始：一鍵自動化環境設定 (Antigravity 用戶專屬)**  
+> 如果你正在使用 **Antigravity IDE**，你根本不需手動打指令！請直接開啟右側的 Agent 面板，複製並貼上以下這段話：
+>
+> ```text
+> 請幫我把 https://github.com/jimmyliao/digest-agent.git clone 下來，然後進到資料夾裡面用 uv sync --all-extras 安裝依賴。好了之後幫我從 .env.example 複製一份 .env。做完提醒我去補上 API Key。
+> ```
+>
+> 貼完之後，Agent 會自動幫你完成下載、安裝與設定。你只需要最後去補上 API Key 即可。
 
 ---
 
