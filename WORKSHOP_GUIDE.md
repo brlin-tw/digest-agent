@@ -55,6 +55,10 @@
 - 驗證流程：去左側菜單點 **[2_publish]** -> 按下 **[Fetch]** -> 勾選一兩篇文章 -> 按下 **[Summarize]**。
 - 有出現摘要畫面（或 Mock 假資料）即算完成 Lab A！
 
+> [!TIP]
+> **想要看真實推播？**
+> 你可以到 [Appendix：Telegram 快速設定](#appendixtelegram-快速設定) 取得 Token 並填入瀏覽器的「渠道設定」中測試。但如果你想用 AI 學會怎麼寫一個新的發佈器，請繼續 Lab B。
+
 ---
 
 ## 🅱️ Lab B：用 Gemini CLI 加功能
@@ -181,3 +185,18 @@
    自己打開 `.env` 把 `GEMINI_API_KEY` 補上（如果沒有 API Key 就不填，系統會進入 Mock 模式）。
 5. **啟動並開始玩**：
    在終端機輸入 `make dev` 就可以看見網頁了！想要加什麼功能，直接再對 Agent 面板許願即可。
+
+---
+
+## 📖 Appendix：Telegram 快速設定
+
+如果學員想要測試真實推播，請照以下步驟取得 Token：
+
+1. **取得 Bot Token**： 
+   在 Telegram 搜尋 [@BotFather](https://t.me/botfather)，對它輸入 `/newbot`，按照說明設定名字，最後會得到一段 `HTTP API Token`。
+2. **取得您的 Chat ID**：
+   在 Telegram 搜尋 [@userinfobot](https://t.me/userinfobot)，對它輸入任何內容，它會回傳你的 `Id` (這就是 Chat ID)。
+3. **設定應用程式**：
+   回到 `http://localhost:8080` 的 **[2_publish]** 頁面，點選 **[渠道設定]** -> **[Telegram]**，填入 Token 與 ID 後點擊 **[儲存到 DB]**。
+4. **測試發佈**：
+   回到 **[Pipeline 操作]**，選取已摘要的文章點擊 **[Publish]**。 ✅
