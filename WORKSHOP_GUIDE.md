@@ -204,5 +204,9 @@
    你也可以直接讓 Agent 幫你搞定。拿到 Key 後對 Agent 貼上：
    > "幫我把 Telegram 的 BOT_TOKEN='你的秘鑰' 和 CHAT_ID='你的ID' 加入到 .env 檔案中，並檢查 src/publishers/telegram_publisher.py 是否已正確配置。"
 
-5. **測試發佈**：
+5. **啟動機器人 (⚠️ 非常重要)**：
+   **發佈之前，請務必先在自己的 Telegram App 中搜尋您的機器人（例如 `@您的機器人帳號`），並點擊下方的「Start (開始)」** 或傳送一句話給它。
+   *(Telegram 防垃圾機制規定：機器人不能主動密未曾互動過的用戶，否則會發生 `chat not found` 錯誤！)*
+
+6. **測試發佈**：
    回到 **[Pipeline 操作]**，選取已摘要的文章點擊 **[Publish]**。 ✅
