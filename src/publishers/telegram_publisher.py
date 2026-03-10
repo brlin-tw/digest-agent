@@ -7,6 +7,8 @@ import os
 import logging
 from typing import Dict, List
 
+import html
+from datetime import datetime
 import aiohttp
 
 from .base_publisher import BasePublisher, PublishResult, STAR_FOOTER_TEXT
@@ -88,14 +90,15 @@ class TelegramPublisher(BasePublisher):
 
     def _format_single_article(self, article: dict) -> str:
         """格式化單篇文章為 Telegram HTML 訊息片段"""
-        title = article.get("title", "Untitled")
-        summary = article.get("summary", "")
+        title = html.escape(article.get("title", "Untitled"))
+        summary = html.escape(article.get("summary", ""))
         url = article.get("url", "")
-        source = article.get("source", "")
-        tags = article.get("tags", [])
+        source = html.escape(article.get("source", ""))
+        tags = [html.escape(t) for t in article.get("tags", [])]
 
         title_html = f"<b>{title}</b>"
         if url:
+            # URL doesn't need escape but should be valid
             title_html = f'<a href="{url}">{title_html}</a>'
             
         parts = [title_html]

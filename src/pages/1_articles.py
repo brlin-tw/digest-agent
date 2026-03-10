@@ -180,9 +180,9 @@ else:
                 with st.spinner(f"發佈 {len(publish_target)} 篇 → {b_channels}..."):
                     ok, errors = publish_articles(list(publish_target), b_channels)
                     if errors:
-                        st.warning(f"⚠️ {ok} 篇成功，錯誤：{errors}")
+                        st.error(f"❌ 發佈失敗：{errors}")
                     else:
-                        st.success(f"✅ 發佈完成！{ok} 篇成功")
+                        st.toast(f"✅ 發佈完成！{ok} 篇成功")
                     st.session_state.selected_ids.clear()
                     st.rerun()
 
@@ -247,9 +247,9 @@ else:
                         with st.spinner("發佈中..."):
                             ok, errors = publish_articles([article.id], ch)
                             if errors:
-                                st.warning(f"⚠️ {errors}")
+                                st.error(f"❌ 發佈失敗：{errors}")
                             else:
-                                st.success("✅ 已發佈")
+                                st.toast("✅ 已發佈")
                             st.rerun()
 
                 if article.source_url:

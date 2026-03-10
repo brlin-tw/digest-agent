@@ -305,7 +305,7 @@ class DigestOrchestrator:
 
             return PublishResult(
                 channels=target_channels,
-                published_count=multi_result.total_success,
+                published_count=sum(r.articles_sent for r in multi_result.results if r.success),
                 errors=errors,
                 success=overall_success,
                 channel_results=multi_result,
