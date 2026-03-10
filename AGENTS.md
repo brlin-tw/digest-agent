@@ -120,3 +120,7 @@ make debug
 - 3 retry-mock tests in `tests/test_gemini_summarizer.py` fail due to SDK API mismatch — pre-existing, not regressions
 - `data/digest.db` on macOS may have `com.apple.provenance` xattr; use `sqlite3 .dump | sqlite3 new.db` to create a writable copy
 - SQLite file lock: do NOT symlink to a DB held by another process
+
+## 🛡️ SRE Guardian Policy
+- **Strict Protection**: DO NOT delete or move 'data/' or 'src/app.py'.
+- **Recovery**: If these files are missing, run 'mkdir -p data && make shell' immediately.

@@ -40,30 +40,31 @@ class TelegramPublisher(BasePublisher):
             return PublishResult(channel="telegram", success=True, articles_sent=len(articles))
 
         try:
-            sent = 0
+            full_message = self._format_message(articles)
+            # Telegram 訊息上限約 4096 字符，若過長需拆分
+            chunks = self._split_message(full_message, 4000)
+
+            sent_chunks = 0
             api_url = f"{self.TELEGRAM_API_BASE.format(token=bot_token)}/sendMessage"
 
             async with aiohttp.ClientSession() as session:
-                for i, article in enumerate(articles):
-                    text = self._format_single_article(article)
-                    if i == len(articles) - 1:
-                        text += f"\n\n<i>{STAR_FOOTER_TEXT}</i>"
+                for chunk in chunks:
                     payload = {
                         "chat_id": chat_id,
-                        "text": text,
+                        "text": chunk,
                         "parse_mode": "HTML",
                         "disable_web_page_preview": cfg.get("disable_preview", False),
                     }
-
                     async with session.post(api_url, json=payload) as resp:
                         if resp.status == 200:
-                            sent += 1
+                            sent_chunks += 1
                         else:
                             body = await resp.text()
-                            logger.warning("[Telegram] API error for article: %s", body)
+                            logger.error("[Telegram] API error: %s", body)
+                            return PublishResult(channel="telegram", success=False, error=f"API Error: {body}")
 
-            logger.info("[Telegram] Sent %d/%d articles to chat %s", sent, len(articles), chat_id)
-            return PublishResult(channel="telegram", success=True, articles_sent=sent)
+            logger.info("[Telegram] Sent %d chunks for %d articles to chat %s", sent_chunks, len(articles), chat_id)
+            return PublishResult(channel="telegram", success=True, articles_sent=len(articles))
 
         except Exception as e:
             logger.error("[Telegram] Failed: %s", e)
@@ -74,33 +75,60 @@ class TelegramPublisher(BasePublisher):
         return bool(config.get("bot_token")) and bool(config.get("chat_id"))
 
     def _format_message(self, articles: list) -> str:
-        """格式化多篇文章為單一 Telegram 訊息（用於 mock log）"""
-        parts = [f"<b>📰 Daily Digest</b> ({len(articles)} articles)\n"]
+        """格式化多篇文章為單一 Telegram HTML 訊息"""
+        date_str = datetime.now().strftime("%Y/%m/%d")
+        header = f"<b>📰 AI 新聞摘要 ({date_str})</b>\n本日共計 {len(articles)} 篇文章\n"
+        
+        parts = [header]
         for i, article in enumerate(articles, 1):
-            parts.append(self._format_single_article(article))
-        return "\n---\n".join(parts)
+            parts.append(f"\n{i}. " + self._format_single_article(article))
+        
+        parts.append(f"\n\n<i>{STAR_FOOTER_TEXT}</i>")
+        return "\n".join(parts)
 
     def _format_single_article(self, article: dict) -> str:
-        """格式化單篇文章為 Telegram HTML 訊息"""
+        """格式化單篇文章為 Telegram HTML 訊息片段"""
         title = article.get("title", "Untitled")
         summary = article.get("summary", "")
         url = article.get("url", "")
         source = article.get("source", "")
         tags = article.get("tags", [])
 
-        parts = [f"<b>{title}</b>"]
+        title_html = f"<b>{title}</b>"
+        if url:
+            title_html = f'<a href="{url}">{title_html}</a>'
+            
+        parts = [title_html]
         if source:
             parts[0] += f"  <i>({source})</i>"
 
         if summary:
-            short = summary[:500] + "..." if len(summary) > 500 else summary
-            parts.append(f"\n{short}")
+            # 摘要在合併模式下不宜過長
+            short = summary[:300] + "..." if len(summary) > 300 else summary
+            parts.append(f"{short}")
 
         if tags:
             tags_str = " ".join(f"#{t}" for t in tags)
-            parts.append(f"\n🏷️ {tags_str}")
-
-        if url:
-            parts.append(f'\n🔗 <a href="{url}">閱讀原文</a>')
+            parts.append(f"🏷️ {tags_str}")
 
         return "\n".join(parts)
+
+    def _split_message(self, text: str, limit: int) -> List[str]:
+        """按長度拆分訊息，儘量在換行處拆分"""
+        if len(text) <= limit:
+            return [text]
+        
+        chunks = []
+        while text:
+            if len(text) <= limit:
+                chunks.append(text)
+                break
+            
+            # 尋找最近的換行符號
+            split_at = text.rfind('\n', 0, limit)
+            if split_at == -1:
+                split_at = limit
+            
+            chunks.append(text[:split_at])
+            text = text[split_at:].lstrip()
+        return chunks

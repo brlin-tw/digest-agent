@@ -158,28 +158,33 @@ def _run_pipeline_job():
 
             summarizer = GeminiSummarizer()
             db = SessionLocal()
-            count = 0
             try:
                 pending = db.query(ArticleDB).filter(ArticleDB.publish_status == "pending").all()
-                for article in pending:
-                    res = asyncio.run(summarizer.summarize({
-                        "title": article.title,
-                        "content": article.content or "",
-                    }))
-                    article.summary = json.dumps({
-                        "title_zh": res.title_zh,
-                        "summary_zh": res.summary_zh,
-                        "key_points": res.key_points,
-                        "tags": res.tags,
-                    })
-                    article.tags = json.dumps(res.tags)
-                    article.publish_status = "summarized"
-                    article.summarized_at = datetime.now(timezone.utc)
+                if pending:
+                    # 使用 summarize_batch 提升效率，同時 RateLimiter 會自動處理頻率限制
+                    article_data = [
+                        {"title": a.title, "content": a.content or ""} for a in pending
+                    ]
+                    summaries = asyncio.run(summarizer.summarize_batch(article_data))
+                    
+                    for article, res in zip(pending, summaries):
+                        if res.raw_response and res.raw_response.startswith("ERROR:"):
+                            logger.error("[Scheduler] Summarize failed for %s: %s", article.title, res.raw_response)
+                            continue
+                            
+                        article.summary = json.dumps({
+                            "title_zh": res.title_zh,
+                            "summary_zh": res.summary_zh,
+                            "key_points": res.key_points,
+                            "tags": res.tags,
+                        })
+                        article.tags = json.dumps(res.tags)
+                        article.publish_status = "summarized"
+                        article.summarized_at = datetime.now(timezone.utc)
                     db.commit()
-                    count += 1
+                    logger.info("[Scheduler] Summarize done: processed %d articles", len(pending))
             finally:
                 db.close()
-            logger.info("[Scheduler] Summarize done: %d articles", count)
 
             db = SessionLocal()
             try:
@@ -196,14 +201,24 @@ def _run_pipeline_job():
             logger.exception("[Scheduler] Fetch+Summarize failed")
 
     if run_publish:
+        # 即使發佈失敗，也更新 last_run 避免一分鐘後又重跑 (尤其是 cron 模式)
+        db = SessionLocal()
+        try:
+            sc = db.query(ScheduleConfigDB).filter(ScheduleConfigDB.id == "publish").first()
+            if sc:
+                sc.last_run = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            db.close()
+
         try:
             channels = json.loads(pub_cfg.channels or '["telegram"]')
             db = SessionLocal()
+            article_dicts = []
             try:
                 summarized = db.query(ArticleDB).filter(
                     ArticleDB.publish_status == "summarized"
                 ).all()
-                article_dicts = []
                 for a in summarized:
                     try:
                         sd = json.loads(a.summary or "{}")
@@ -221,28 +236,25 @@ def _run_pipeline_job():
                 db.close()
 
             if article_dicts:
+                # 執行發佈
                 result = asyncio.run(orch.run_publish_pipeline(
                     articles=article_dicts, channels=channels,
                 ))
+                
+                # 更新文章狀態
                 db = SessionLocal()
                 try:
                     for ad in article_dicts:
                         row = db.query(ArticleDB).filter(ArticleDB.id == ad["id"]).first()
                         if row:
+                            # 即使整體 success 為 False，只要執行過就標記為已處理 (避免重複發送同一批文章)
                             row.publish_status = "published" if result.success else "failed"
                             row.published_at_channels = json.dumps({
                                 ch: datetime.now(timezone.utc).isoformat() for ch in channels
                             })
-                    sc = db.query(ScheduleConfigDB).filter(
-                        ScheduleConfigDB.id == "publish"
-                    ).first()
-                    if sc:
-                        sc.last_run = datetime.now(timezone.utc)
                     db.commit()
+                    logger.info("[Scheduler] Publish done: %d articles successfully sent", result.published_count)
                 finally:
                     db.close()
-                logger.info("[Scheduler] Publish done: %d articles to %s",
-                            result.published_count, channels)
-
         except Exception:
-            logger.exception("[Scheduler] Publish failed")
+            logger.exception("[Scheduler] Publish execution failed")
